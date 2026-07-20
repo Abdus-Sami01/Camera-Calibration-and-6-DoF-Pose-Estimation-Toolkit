@@ -8,6 +8,7 @@ import numpy as np
 
 from .camera_model import CameraIntrinsics
 from .pose_estimator import ObjectPose, PoseEstimator
+from .smoothing import PoseSmoother
 
 
 def annotate_frame(
@@ -15,8 +16,12 @@ def annotate_frame(
     estimator: PoseEstimator,
     marker_size: float,
     fps: float | None = None,
+    smoothers: dict[int, PoseSmoother] | None = None,
+    dt: float = 1.0,
 ) -> tuple[np.ndarray, list[ObjectPose]]:
     poses = estimator.estimate_aruco(frame, marker_size)
+    if smoothers is not None:
+        poses = [_smooth_pose(pose, smoothers, dt) for pose in poses]
     canvas = frame.copy()
     axis_length = marker_size * 0.75
     for pose in poses:
@@ -24,6 +29,21 @@ def annotate_frame(
                           pose.rvec, pose.tvec, axis_length, 2)
     _draw_readout(canvas, poses, fps)
     return canvas, poses
+
+
+def _smooth_pose(pose: ObjectPose, smoothers: dict[int, PoseSmoother], dt: float) -> ObjectPose:
+    if pose.identifier is None:
+        return pose
+    smoother = smoothers.setdefault(pose.identifier, PoseSmoother())
+    result = smoother.update(pose.rvec, pose.tvec, dt)
+    return ObjectPose(
+        rvec=result.rvec,
+        tvec=result.tvec,
+        reprojection_error=pose.reprojection_error,
+        image_points=pose.image_points,
+        identifier=pose.identifier,
+        solver=pose.solver,
+    )
 
 
 def _draw_readout(canvas: np.ndarray, poses: list[ObjectPose], fps: float | None) -> None:
@@ -63,12 +83,16 @@ def process_video(
     marker_size: float,
     output_path: str | Path | None = None,
     show: bool = True,
+    smooth: bool = False,
 ) -> None:
     estimator = PoseEstimator(intrinsics)
     capture = cv2.VideoCapture(source)
     if not capture.isOpened():
         raise RuntimeError(f"Could not open video source {source!r}")
     writer = _make_writer(capture, output_path)
+    smoothers: dict[int, PoseSmoother] | None = {} if smooth else None
+    fps_hint = capture.get(cv2.CAP_PROP_FPS) or 30.0
+    dt = 1.0 / fps_hint
     smoothed_fps = None
     try:
         while True:
@@ -76,7 +100,7 @@ def process_video(
             if not ok:
                 break
             started = time.perf_counter()
-            annotated, _ = annotate_frame(frame, estimator, marker_size, smoothed_fps)
+            annotated, _ = annotate_frame(frame, estimator, marker_size, smoothed_fps, smoothers, dt)
             instant = 1.0 / max(time.perf_counter() - started, 1e-6)
             smoothed_fps = instant if smoothed_fps is None else 0.9 * smoothed_fps + 0.1 * instant
             if writer is not None:
@@ -103,7 +127,7 @@ def _make_writer(capture, output_path):
     return cv2.VideoWriter(str(output_path), fourcc, fps, (width, height))
 
 
-def run_live(calibration_path: str | Path, marker_size: float, camera_index: int = 0) -> int:
+def run_live(calibration_path: str | Path, marker_size: float, camera_index: int = 0, smooth: bool = False) -> int:
     intrinsics = PoseEstimator.from_calibration(calibration_path).intrinsics
-    process_video(camera_index, intrinsics, marker_size, show=True)
+    process_video(camera_index, intrinsics, marker_size, show=True, smooth=smooth)
     return 0

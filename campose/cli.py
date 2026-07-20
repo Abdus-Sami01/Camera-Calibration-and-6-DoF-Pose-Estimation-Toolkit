@@ -31,6 +31,7 @@ def _add_live(subparsers) -> None:
     parser.add_argument("--target", default="aruco", choices=["aruco"])
     parser.add_argument("--marker-size", type=float, required=True)
     parser.add_argument("--camera", type=int, default=0, help="Camera index")
+    parser.add_argument("--smooth", action="store_true", help="Apply temporal pose smoothing")
     parser.set_defaults(func=_run_live)
 
 
@@ -82,7 +83,7 @@ def _run_estimate(args) -> int:
 def _run_live(args) -> int:
     from .live import run_live
 
-    return run_live(args.calibration, args.marker_size, camera_index=args.camera)
+    return run_live(args.calibration, args.marker_size, camera_index=args.camera, smooth=args.smooth)
 
 
 def build_parser() -> argparse.ArgumentParser:
