@@ -206,6 +206,25 @@ Enable it in the live demo with `python -m campose live ... --smooth`.
 
 ---
 
+## Multi-marker board pose
+
+A single marker vanishes the moment a hand covers it. A **marker board** — several
+ArUco markers at known relative positions — pools every visible marker's corners
+into one PnP solve, so the pose survives heavy occlusion. On a 3×3 grid the board
+pose stays accurate (translation within ~2.7 mm, rotation under ~1.2°) even when
+only one of nine markers is visible.
+
+<p align="center"><img src="figures/board_occlusion.png" width="80%" alt="Board pose under occlusion"/></p>
+
+```python
+from campose import grid_board, PoseEstimator
+board = grid_board(markers_x=3, markers_y=3, marker_length=0.04, marker_separation=0.01)
+result = PoseEstimator.from_calibration("calibration.json").estimate_board(image, board)
+print(result.marker_count, result.pose.translation, result.pose.reprojection_error)
+```
+
+---
+
 ## Package layout
 
 ```
@@ -217,7 +236,8 @@ campose/
 ├── results.py         # CalibrationResult / BoardPose value objects
 ├── io.py              # JSON / YAML / npz save + load
 ├── solvers.py         # unified PnP solver interface
-├── pose_estimator.py  # ArUco + planar-target 6-DoF pose
+├── pose_estimator.py  # ArUco + planar-target + marker-board 6-DoF pose
+├── marker_board.py    # multi-marker board layout + grid constructor
 ├── visualization.py   # 3D poses, distortion maps, error charts, axis overlay
 ├── evaluation.py      # the four experiment runners
 ├── quality.py         # pre-calibration capture-quality assessment
@@ -240,8 +260,7 @@ campose/
 
 ## Extensions (natural next steps)
 
-Stereo calibration · ChArUco boards for graceful occlusion handling ·
-multi-marker board pose.
+Stereo calibration · ChArUco boards for graceful occlusion handling.
 
 ---
 

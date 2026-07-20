@@ -13,10 +13,11 @@ from campose import visualization as viz  # noqa: E402
 from campose.board import CheckerboardSpec  # noqa: E402
 from campose.calibrator import CameraCalibrator  # noqa: E402
 from campose.camera_model import CameraIntrinsics  # noqa: E402
+from campose.marker_board import grid_board  # noqa: E402
 from campose.pose_estimator import PoseEstimator, _marker_object_points  # noqa: E402
 from campose.rotations import geodesic_angle, rodrigues_to_matrix  # noqa: E402
 from campose.smoothing import PoseSmoother  # noqa: E402
-from campose.synthetic import VirtualCamera, render_aruco_marker  # noqa: E402
+from campose.synthetic import VirtualCamera, render_aruco_marker, render_marker_board  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 FIGURES = ROOT / "figures"
@@ -172,6 +173,36 @@ def _smoothing_figure() -> None:
     plt.close(fig)
 
 
+def _board_occlusion_figure(intrinsics) -> None:
+    board = grid_board(3, 3, marker_length=0.04, marker_separation=0.01)
+    estimator = PoseEstimator(intrinsics)
+    rvec, tvec = np.array([0.15, -0.2, 0.05]), np.array([0.02, -0.01, 0.6])
+    all_ids = board.all_ids()
+    visible_counts, trans_errs, rot_errs = [], [], []
+    for shown in range(9, 0, -1):
+        rendered = render_marker_board(intrinsics, SIZE, board, rvec, tvec, only_ids=all_ids[:shown])
+        result = estimator.estimate_board(rendered.image, board)
+        if result is None:
+            continue
+        visible_counts.append(shown)
+        trans_errs.append(np.linalg.norm(result.pose.translation - rendered.tvec) * 1000)
+        rot_errs.append(geodesic_angle(rodrigues_to_matrix(rendered.rvec), result.pose.rotation_matrix))
+    fig, (a, b) = plt.subplots(1, 2, figsize=(11, 4))
+    a.plot(visible_counts, trans_errs, "o-", color="#4c72b0")
+    a.invert_xaxis()
+    a.set_xlabel("markers visible (of 9)")
+    a.set_ylabel("translation error (mm)")
+    a.set_title("Board pose holds under occlusion")
+    b.plot(visible_counts, rot_errs, "o-", color="#d1495b")
+    b.invert_xaxis()
+    b.set_xlabel("markers visible (of 9)")
+    b.set_ylabel("rotation error (deg)")
+    b.set_title("Rotation stays bounded")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "board_occlusion.png", dpi=110)
+    plt.close(fig)
+
+
 def main() -> None:
     FIGURES.mkdir(exist_ok=True)
     calibrator = _build_calibrator()
@@ -184,6 +215,7 @@ def main() -> None:
     _solver_figure(intrinsics)
     _robustness_figure(intrinsics)
     _smoothing_figure()
+    _board_occlusion_figure(intrinsics)
     print(f"\nWrote figures to {FIGURES}")
 
 
