@@ -14,6 +14,8 @@ from campose.board import CheckerboardSpec  # noqa: E402
 from campose.calibrator import CameraCalibrator  # noqa: E402
 from campose.camera_model import CameraIntrinsics  # noqa: E402
 from campose.pose_estimator import PoseEstimator, _marker_object_points  # noqa: E402
+from campose.rotations import geodesic_angle, rodrigues_to_matrix  # noqa: E402
+from campose.smoothing import PoseSmoother  # noqa: E402
 from campose.synthetic import VirtualCamera, render_aruco_marker  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -137,6 +139,39 @@ def _robustness_figure(intrinsics) -> None:
     plt.close(fig)
 
 
+def _smoothing_figure() -> None:
+    rng = np.random.default_rng(3)
+    true_t = np.array([0.02, -0.01, 0.5])
+    true_r = np.array([0.2, -0.3, 0.1])
+    true_matrix = rodrigues_to_matrix(true_r)
+    smoother = PoseSmoother(translation_process_noise=0.5, translation_measurement_noise=5e-3, rotation_gain=0.3)
+    raw_t, sm_t, raw_a, sm_a = [], [], [], []
+    for _ in range(160):
+        noisy_t = true_t + rng.normal(0, 0.006, 3)
+        noisy_r = true_r + rng.normal(0, 0.06, 3)
+        out = smoother.update(noisy_r, noisy_t, dt=1 / 30)
+        raw_t.append(np.linalg.norm(noisy_t - true_t) * 1000)
+        sm_t.append(np.linalg.norm(out.tvec - true_t) * 1000)
+        raw_a.append(geodesic_angle(true_matrix, rodrigues_to_matrix(noisy_r)))
+        sm_a.append(geodesic_angle(true_matrix, rodrigues_to_matrix(out.rvec)))
+    fig, (a, b) = plt.subplots(1, 2, figsize=(11, 4))
+    a.plot(raw_t, color="#c0c0c0", label="raw")
+    a.plot(sm_t, color="#4c72b0", label="smoothed")
+    a.set_xlabel("frame")
+    a.set_ylabel("translation error (mm)")
+    a.set_title("Translation jitter")
+    a.legend(fontsize=8)
+    b.plot(raw_a, color="#c0c0c0", label="raw")
+    b.plot(sm_a, color="#d1495b", label="smoothed")
+    b.set_xlabel("frame")
+    b.set_ylabel("rotation error (deg)")
+    b.set_title("Rotation jitter")
+    b.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(FIGURES / "temporal_smoothing.png", dpi=110)
+    plt.close(fig)
+
+
 def main() -> None:
     FIGURES.mkdir(exist_ok=True)
     calibrator = _build_calibrator()
@@ -148,6 +183,7 @@ def main() -> None:
     _distance_figure(intrinsics)
     _solver_figure(intrinsics)
     _robustness_figure(intrinsics)
+    _smoothing_figure()
     print(f"\nWrote figures to {FIGURES}")
 
 

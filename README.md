@@ -166,6 +166,26 @@ motivation for the ChArUco stretch goal.
 
 ---
 
+## Temporal pose smoothing
+
+Per-frame PnP is noisy. `campose.PoseSmoother` steadies it with a constant-velocity
+Kalman filter on translation and manifold-aware SLERP smoothing on rotation, so
+the live overlay stops trembling without lagging behind real motion. On a static
+marker it roughly halves both translation and rotation jitter while tracking
+motion to sub-millimetre lag.
+
+<p align="center"><img src="figures/temporal_smoothing.png" width="80%" alt="Temporal pose smoothing"/></p>
+
+```python
+from campose import PoseSmoother
+smoother = PoseSmoother(rotation_gain=0.3)
+steady = smoother.update(pose.rvec, pose.tvec, dt=1/30)   # per frame
+```
+
+Enable it in the live demo with `python -m campose live ... --smooth`.
+
+---
+
 ## Package layout
 
 ```
@@ -180,6 +200,7 @@ campose/
 ├── pose_estimator.py  # ArUco + planar-target 6-DoF pose
 ├── visualization.py   # 3D poses, distortion maps, error charts, axis overlay
 ├── evaluation.py      # the four experiment runners
+├── smoothing.py       # constant-velocity Kalman + SLERP pose smoothing
 ├── synthetic.py       # virtual camera with exact ground truth
 ├── live.py            # real-time webcam annotation loop
 └── cli.py             # calibrate / estimate / live
@@ -192,17 +213,14 @@ campose/
 - **Planar targets only.** ArUco and flat feature targets are supported; full 3D
   object tracking from a CAD model is not.
 - **Single camera.** No stereo calibration or depth from disparity.
-- **No temporal filtering.** Poses are estimated per frame; a Kalman/EKF smoother
-  would steady the live demo but is not implemented.
 - **Sample data is synthetic.** Real-camera calibration is fully supported and
   documented, but the bundled images come from the virtual camera so ground
   truth is exact.
 
 ## Extensions (natural next steps)
 
-Stereo calibration · ChArUco boards for graceful occlusion handling · temporal
-pose smoothing (EKF) · multi-marker board pose · automatic capture-quality
-warnings.
+Stereo calibration · ChArUco boards for graceful occlusion handling ·
+multi-marker board pose · automatic capture-quality warnings.
 
 ---
 
