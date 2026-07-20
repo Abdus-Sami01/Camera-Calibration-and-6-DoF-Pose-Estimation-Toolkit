@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import cv2  # noqa: E402
 import matplotlib
 
 matplotlib.use("Agg")
@@ -18,6 +19,7 @@ from campose.marker_board import grid_board  # noqa: E402
 from campose.pose_estimator import PoseEstimator, _marker_object_points  # noqa: E402
 from campose.rotations import geodesic_angle, rodrigues_to_matrix  # noqa: E402
 from campose.smoothing import PoseSmoother  # noqa: E402
+from campose.stereo import StereoCalibrator, rectify_pair  # noqa: E402
 from campose.synthetic import VirtualCamera, render_aruco_marker, render_marker_board  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -233,6 +235,44 @@ def _charuco_occlusion_figure(intrinsics) -> None:
     plt.close(fig)
 
 
+def _stereo_figure() -> None:
+    from campose.rotations import matrix_to_rodrigues, rodrigues_to_matrix
+
+    R_true = rodrigues_to_matrix(np.array([0.0, -0.03, 0.0]))
+    T_true = np.array([-0.10, 0.0, 0.0])
+    left_cam = VirtualCamera(CameraIntrinsics.from_matrix(np.array([[900.0, 0, 320], [0, 900.0, 240], [0, 0, 1]]), np.zeros(5)), SIZE, SPEC)
+    right_cam = VirtualCamera(CameraIntrinsics.from_matrix(np.array([[898.0, 0, 321], [0, 899.0, 240], [0, 0, 1]]), np.zeros(5)), SIZE, SPEC)
+    cx = -(SPEC.columns - 1) * SPEC.square_size / 2
+    cy = -(SPEC.rows - 1) * SPEC.square_size / 2
+    rng = np.random.default_rng(2)
+    calibrator = StereoCalibrator(SPEC)
+    tries = 0
+    while calibrator.pair_count < 14 and tries < 3000:
+        tries += 1
+        rvec_l = rng.uniform(-0.35, 0.35, 3)
+        tvec_l = np.array([cx + 0.05 + rng.uniform(-0.04, 0.04), cy + rng.uniform(-0.04, 0.04), rng.uniform(0.6, 0.95)])
+        rvec_r = matrix_to_rodrigues(R_true @ rodrigues_to_matrix(rvec_l))
+        lb = left_cam.render(rvec_l, tvec_l)
+        rb = right_cam.render(rvec_r, R_true @ tvec_l + T_true)
+        if lb.visible and rb.visible:
+            calibrator.add_pair(lb.image, rb.image)
+    result = calibrator.calibrate()
+    left_img = left_cam.render(np.array([0.1, -0.1, 0.02]), np.array([cx + 0.05, cy, 0.7])).image
+    right_img = right_cam.render(matrix_to_rodrigues(R_true @ rodrigues_to_matrix(np.array([0.1, -0.1, 0.02]))), R_true @ np.array([cx + 0.05, cy, 0.7]) + T_true).image
+    left_rect, right_rect, _ = rectify_pair(left_img, right_img, result)
+    pair = np.hstack([cv2.cvtColor(left_rect, cv2.COLOR_BGR2RGB), cv2.cvtColor(right_rect, cv2.COLOR_BGR2RGB)])
+    fig, ax = plt.subplots(figsize=(11, 4.2))
+    ax.imshow(pair)
+    for y in range(40, SIZE[1], 45):
+        ax.axhline(y, color="#2e8b57", linewidth=0.7, alpha=0.8)
+    ax.axvline(SIZE[0], color="white", linewidth=2)
+    ax.set_title(f"Rectified stereo pair (baseline {result.baseline * 100:.1f} cm) — corners share scanlines")
+    ax.axis("off")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "stereo_rectification.png", dpi=110)
+    plt.close(fig)
+
+
 def main() -> None:
     FIGURES.mkdir(exist_ok=True)
     calibrator = _build_calibrator()
@@ -247,6 +287,7 @@ def main() -> None:
     _smoothing_figure()
     _board_occlusion_figure(intrinsics)
     _charuco_occlusion_figure(intrinsics)
+    _stereo_figure()
     print(f"\nWrote figures to {FIGURES}")
 
 
