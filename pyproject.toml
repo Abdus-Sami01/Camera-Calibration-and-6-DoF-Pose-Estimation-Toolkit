@@ -1,0 +1,41 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "campose"
+version = "0.1.0"
+description = "Camera calibration and 6-DoF pose estimation toolkit with diagnostic reporting and accuracy evaluation."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "Abdus Sami", email = "muhammadabdulsami7@gmail.com" }]
+keywords = ["camera-calibration", "pose-estimation", "computer-vision", "pnp", "aruco", "opencv"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Topic :: Scientific/Engineering :: Image Processing",
+    "Intended Audience :: Science/Research",
+]
+dependencies = [
+    "numpy>=1.21",
+    "opencv-python>=4.7",
+    "matplotlib>=3.5",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+viz3d = ["open3d>=0.17"]
+dev = ["pytest>=7.0"]
+
+[project.urls]
+Homepage = "https://github.com/abdus-sami01/camera-calibration-and-6-dof-pose-estimation-toolkit"
+
+[project.scripts]
+campose = "campose.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["campose*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
