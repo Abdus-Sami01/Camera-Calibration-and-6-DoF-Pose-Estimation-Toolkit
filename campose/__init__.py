@@ -14,10 +14,14 @@ from .results import BoardPose, CalibrationResult
 from .rotations import (
     geodesic_angle,
     matrix_to_euler_zyx,
+    matrix_to_quaternion,
     matrix_to_rodrigues,
+    quaternion_slerp,
+    quaternion_to_matrix,
     rodrigues_to_euler_zyx,
     rodrigues_to_matrix,
 )
+from .smoothing import ConstantVelocityKalman, PoseSmoother, SmoothedPose
 from .solvers import PoseSolution, available_solvers, compare_solvers, solve_pnp
 
 __version__ = "0.1.0"
@@ -44,5 +48,11 @@ __all__ = [
     "compare_solvers",
     "available_solvers",
     "PoseSolution",
+    "matrix_to_quaternion",
+    "quaternion_to_matrix",
+    "quaternion_slerp",
+    "PoseSmoother",
+    "SmoothedPose",
+    "ConstantVelocityKalman",
     "__version__",
 ]

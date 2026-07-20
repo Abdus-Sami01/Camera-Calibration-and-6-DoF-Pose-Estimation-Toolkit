@@ -78,3 +78,58 @@ def is_rotation_matrix(matrix: np.ndarray, tolerance: float = 1e-6) -> bool:
         return False
     orthonormal = np.allclose(mat.T @ mat, np.eye(3), atol=tolerance)
     return orthonormal and abs(np.linalg.det(mat) - 1.0) < tolerance
+
+
+def matrix_to_quaternion(matrix: np.ndarray) -> np.ndarray:
+    mat = np.asarray(matrix, dtype=np.float64)
+    trace = np.trace(mat)
+    if trace > 0.0:
+        s = np.sqrt(trace + 1.0) * 2.0
+        w = 0.25 * s
+        x = (mat[2, 1] - mat[1, 2]) / s
+        y = (mat[0, 2] - mat[2, 0]) / s
+        z = (mat[1, 0] - mat[0, 1]) / s
+    elif mat[0, 0] > mat[1, 1] and mat[0, 0] > mat[2, 2]:
+        s = np.sqrt(1.0 + mat[0, 0] - mat[1, 1] - mat[2, 2]) * 2.0
+        w = (mat[2, 1] - mat[1, 2]) / s
+        x = 0.25 * s
+        y = (mat[0, 1] + mat[1, 0]) / s
+        z = (mat[0, 2] + mat[2, 0]) / s
+    elif mat[1, 1] > mat[2, 2]:
+        s = np.sqrt(1.0 + mat[1, 1] - mat[0, 0] - mat[2, 2]) * 2.0
+        w = (mat[0, 2] - mat[2, 0]) / s
+        x = (mat[0, 1] + mat[1, 0]) / s
+        y = 0.25 * s
+        z = (mat[1, 2] + mat[2, 1]) / s
+    else:
+        s = np.sqrt(1.0 + mat[2, 2] - mat[0, 0] - mat[1, 1]) * 2.0
+        w = (mat[1, 0] - mat[0, 1]) / s
+        x = (mat[0, 2] + mat[2, 0]) / s
+        y = (mat[1, 2] + mat[2, 1]) / s
+        z = 0.25 * s
+    quaternion = np.array([w, x, y, z])
+    return quaternion / np.linalg.norm(quaternion)
+
+
+def quaternion_to_matrix(quaternion: np.ndarray) -> np.ndarray:
+    w, x, y, z = np.asarray(quaternion, dtype=np.float64) / np.linalg.norm(quaternion)
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
+def quaternion_slerp(q0: np.ndarray, q1: np.ndarray, t: float) -> np.ndarray:
+    a = np.asarray(q0, dtype=np.float64) / np.linalg.norm(q0)
+    b = np.asarray(q1, dtype=np.float64) / np.linalg.norm(q1)
+    dot = float(np.dot(a, b))
+    if dot < 0.0:
+        b = -b
+        dot = -dot
+    if dot > 0.9995:
+        result = a + t * (b - a)
+        return result / np.linalg.norm(result)
+    theta = np.arccos(np.clip(dot, -1.0, 1.0))
+    sin_theta = np.sin(theta)
+    return (np.sin((1.0 - t) * theta) / sin_theta) * a + (np.sin(t * theta) / sin_theta) * b
