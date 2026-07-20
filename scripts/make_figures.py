@@ -1,0 +1,155 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt  # noqa: E402
+import numpy as np  # noqa: E402
+
+from campose import evaluation as ev  # noqa: E402
+from campose import visualization as viz  # noqa: E402
+from campose.board import CheckerboardSpec  # noqa: E402
+from campose.calibrator import CameraCalibrator  # noqa: E402
+from campose.camera_model import CameraIntrinsics  # noqa: E402
+from campose.pose_estimator import PoseEstimator, _marker_object_points  # noqa: E402
+from campose.synthetic import VirtualCamera, render_aruco_marker  # noqa: E402
+
+ROOT = Path(__file__).resolve().parent.parent
+FIGURES = ROOT / "figures"
+SPEC = CheckerboardSpec(9, 6, 0.025)
+K = np.array([[920.0, 0.0, 328.0], [0.0, 918.0, 244.0], [0.0, 0.0, 1.0]])
+DIST = np.array([-0.262, 0.121, 0.0009, -0.0007, 0.018])
+SIZE = (640, 480)
+
+
+def _build_calibrator() -> CameraCalibrator:
+    camera = VirtualCamera(CameraIntrinsics.from_matrix(K, DIST), SIZE, SPEC)
+    rng = np.random.default_rng(7)
+    calibrator = CameraCalibrator(SPEC)
+    cx = -(SPEC.columns - 1) * SPEC.square_size / 2
+    cy = -(SPEC.rows - 1) * SPEC.square_size / 2
+    tries = 0
+    while calibrator.view_count < 22 and tries < 1000:
+        tries += 1
+        rvec = rng.uniform(-0.55, 0.55, 3)
+        tvec = np.array([cx + rng.uniform(-0.05, 0.05), cy + rng.uniform(-0.04, 0.04), rng.uniform(0.55, 1.05)])
+        rendered = camera.render(rvec, tvec)
+        if rendered.visible:
+            calibrator.add_image(rendered.image, source=f"v{calibrator.view_count:02d}")
+    return calibrator
+
+
+def _calibration_figures(calibrator, result) -> None:
+    viz.plot_reprojection_errors(result).savefig(FIGURES / "reprojection_error_per_image.png", dpi=110)
+    viz.plot_board_poses_3d(result, SPEC).savefig(FIGURES / "3d_board_poses.png", dpi=110)
+    viz.plot_distortion_map(result.intrinsics, SIZE).savefig(FIGURES / "distortion_map.png", dpi=110)
+    camera = VirtualCamera(CameraIntrinsics.from_matrix(K, DIST), SIZE, SPEC)
+    cx = -(SPEC.columns - 1) * SPEC.square_size / 2
+    cy = -(SPEC.rows - 1) * SPEC.square_size / 2
+    sample = camera.render(np.array([0.15, -0.1, 0.05]), np.array([cx, cy, 0.7])).image
+    viz.plot_undistortion(sample, result.intrinsics).savefig(FIGURES / "undistortion.png", dpi=110)
+    plt.close("all")
+
+
+def _count_figure(calibrator) -> None:
+    trials = ev.calibration_vs_count(calibrator, [4, 6, 8, 10, 13, 16, 19, 22])
+    counts = [t.image_count for t in trials]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+    ax1.plot(counts, [t.overall_rms for t in trials], "o-", color="#4c72b0")
+    ax1.set_xlabel("images used")
+    ax1.set_ylabel("overall RMS (px)")
+    ax1.set_title("Calibration error vs image count")
+    ax2.plot(counts, [t.fx for t in trials], "o-", color="#d1495b", label="fx")
+    ax2.axhline(K[0, 0], color="#2a2a2a", linestyle="--", linewidth=1, label="true fx")
+    ax2.set_xlabel("images used")
+    ax2.set_ylabel("estimated fx (px)")
+    ax2.set_title("Focal length convergence")
+    ax2.legend(fontsize=8)
+    fig.tight_layout()
+    fig.savefig(FIGURES / "calibration_vs_count.png", dpi=110)
+    plt.close(fig)
+
+
+def _distance_figure(intrinsics) -> None:
+    markers = [
+        render_aruco_marker(intrinsics, SIZE, 17, 0.08, np.array([0.06, -0.05, 0.03]), np.array([0.0, 0.0, d]))
+        for d in [0.3, 0.45, 0.6, 0.75, 0.9, 1.05, 1.2]
+    ]
+    trials = ev.pose_vs_distance(markers, intrinsics, 0.08)
+    dist = [t.true_distance * 100 for t in trials]
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(11, 4))
+    ax1.plot(dist, [t.translation_error * 1000 for t in trials], "o-", color="#4c72b0")
+    ax1.set_xlabel("true distance (cm)")
+    ax1.set_ylabel("translation error (mm)")
+    ax1.set_title("Pose translation error vs distance")
+    ax2.plot(dist, [t.rotation_error for t in trials], "o-", color="#d1495b")
+    ax2.set_xlabel("true distance (cm)")
+    ax2.set_ylabel("rotation error (deg)")
+    ax2.set_title("Pose rotation error vs distance")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "accuracy_vs_distance.png", dpi=110)
+    plt.close(fig)
+
+
+def _solver_figure(intrinsics) -> None:
+    rendered = render_aruco_marker(intrinsics, SIZE, 17, 0.08, np.array([0.12, -0.16, 0.05]), np.array([0.0, 0.0, 0.5]))
+    pose = PoseEstimator(intrinsics).estimate_aruco(rendered.image, 0.08)[0]
+    trials = ev.solver_comparison(_marker_object_points(0.08), pose.image_points, intrinsics, rendered.rvec, rendered.tvec)
+    rows = [[t.solver, f"{t.translation_error * 1000:.2f}", f"{t.rotation_error:.2f}",
+             f"{t.reprojection_rms:.3f}", f"{t.solve_time_ms:.3f}"] for t in trials]
+    fig, ax = plt.subplots(figsize=(8, 0.5 + 0.4 * len(rows)))
+    ax.axis("off")
+    table = ax.table(
+        cellText=rows,
+        colLabels=["solver", "trans err (mm)", "rot err (deg)", "reproj (px)", "time (ms)"],
+        loc="center", cellLoc="center",
+    )
+    table.auto_set_font_size(False)
+    table.set_fontsize(9)
+    table.scale(1, 1.4)
+    ax.set_title("PnP solver comparison on one marker", pad=12)
+    fig.tight_layout()
+    fig.savefig(FIGURES / "solver_comparison_table.png", dpi=110)
+    plt.close(fig)
+
+
+def _robustness_figure(intrinsics) -> None:
+    rendered = render_aruco_marker(intrinsics, SIZE, 17, 0.08, np.array([0.1, -0.12, 0.05]), np.array([0.0, 0.0, 0.5]))
+    degradations = [
+        ("blur", 3, ev.blur(3)), ("blur", 9, ev.blur(9)), ("blur", 15, ev.blur(15)), ("blur", 25, ev.blur(25)),
+        ("occlude", 0.1, ev.occlude(0.1)), ("occlude", 0.25, ev.occlude(0.25)), ("occlude", 0.5, ev.occlude(0.5)),
+        ("dark", 0.3, ev.darken(0.3)), ("dark", 0.1, ev.darken(0.1)),
+    ]
+    trials = ev.robustness_sweep(rendered.image, intrinsics, 0.08, degradations)
+    labels = [f"{t.condition}\n{t.level}" for t in trials]
+    colors = ["#2e8b57" if t.detected else "#d1495b" for t in trials]
+    fig, ax = plt.subplots(figsize=(10, 4))
+    ax.bar(range(len(trials)), [1 if t.detected else 0 for t in trials], color=colors)
+    ax.set_xticks(range(len(trials)))
+    ax.set_xticklabels(labels, fontsize=8)
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(["failed", "detected"])
+    ax.set_title("Marker detection under degradation")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "robustness.png", dpi=110)
+    plt.close(fig)
+
+
+def main() -> None:
+    FIGURES.mkdir(exist_ok=True)
+    calibrator = _build_calibrator()
+    result = calibrator.calibrate()
+    print(result.summary())
+    intrinsics = result.intrinsics
+    _calibration_figures(calibrator, result)
+    _count_figure(calibrator)
+    _distance_figure(intrinsics)
+    _solver_figure(intrinsics)
+    _robustness_figure(intrinsics)
+    print(f"\nWrote figures to {FIGURES}")
+
+
+if __name__ == "__main__":
+    main()
