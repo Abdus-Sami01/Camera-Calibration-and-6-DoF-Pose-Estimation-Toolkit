@@ -225,6 +225,31 @@ print(result.marker_count, result.pose.translation, result.pose.reprojection_err
 
 ---
 
+## ChArUco: calibration and pose that tolerate occlusion
+
+A plain checkerboard is all-or-nothing — cover one corner and detection fails. A
+**ChArUco board** embeds ArUco markers in the white squares, so each chessboard
+corner is identified independently and the board degrades gracefully: cover half
+of it and the visible half still calibrates and localises. On a 5×7 board the
+pose stays within a few millimetres while any reasonable fraction of corners
+survives.
+
+<p align="center"><img src="figures/charuco_occlusion.png" width="80%" alt="ChArUco under occlusion"/></p>
+
+```python
+from campose.charuco import CharucoSpec, CharucoCalibrator, detect_charuco, estimate_charuco_pose
+spec = CharucoSpec(squares_x=5, squares_y=7, square_length=0.03, marker_length=0.022)
+
+calibrator = CharucoCalibrator(spec)      # calibrate from occlusion-tolerant views
+for image in images:
+    calibrator.add_image(image)
+result = calibrator.calibrate()
+
+pose = estimate_charuco_pose(detect_charuco(frame, spec), spec, result.intrinsics)
+```
+
+---
+
 ## Package layout
 
 ```
@@ -239,6 +264,7 @@ campose/
 ├── pose_estimator.py  # ArUco + planar-target + marker-board 6-DoF pose
 ├── marker_board.py    # multi-marker board layout + grid constructor
 ├── visualization.py   # 3D poses, distortion maps, error charts, axis overlay
+├── charuco.py         # ChArUco board calibration + occlusion-tolerant pose
 ├── evaluation.py      # the four experiment runners
 ├── quality.py         # pre-calibration capture-quality assessment
 ├── smoothing.py       # constant-velocity Kalman + SLERP pose smoothing
@@ -260,7 +286,7 @@ campose/
 
 ## Extensions (natural next steps)
 
-Stereo calibration · ChArUco boards for graceful occlusion handling.
+Stereo calibration (the remaining path to lift the single-camera limitation).
 
 ---
 

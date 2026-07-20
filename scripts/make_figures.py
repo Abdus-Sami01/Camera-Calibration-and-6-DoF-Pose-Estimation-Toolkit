@@ -13,6 +13,7 @@ from campose import visualization as viz  # noqa: E402
 from campose.board import CheckerboardSpec  # noqa: E402
 from campose.calibrator import CameraCalibrator  # noqa: E402
 from campose.camera_model import CameraIntrinsics  # noqa: E402
+from campose.charuco import CharucoSpec, detect_charuco, estimate_charuco_pose, render_charuco  # noqa: E402
 from campose.marker_board import grid_board  # noqa: E402
 from campose.pose_estimator import PoseEstimator, _marker_object_points  # noqa: E402
 from campose.rotations import geodesic_angle, rodrigues_to_matrix  # noqa: E402
@@ -203,6 +204,35 @@ def _board_occlusion_figure(intrinsics) -> None:
     plt.close(fig)
 
 
+def _charuco_occlusion_figure(intrinsics) -> None:
+    spec = CharucoSpec(5, 7, 0.03, 0.022)
+    facing = rodrigues_to_matrix(np.array([np.pi, 0.0, 0.0])) @ rodrigues_to_matrix(np.array([0.1, -0.15, 0.05]))
+    tvec = np.array([0.0, 0.0, 0.5]) - facing @ np.array([spec.width / 2, spec.height / 2, 0.0])
+    clean = render_charuco(intrinsics, SIZE, spec, np.array([0.1, -0.15, 0.05]), tvec)
+    fractions, counts, errors = [], [], []
+    for occ in [0.0, 0.15, 0.3, 0.45, 0.6]:
+        rendered = render_charuco(intrinsics, SIZE, spec, np.array([0.1, -0.15, 0.05]), tvec, occlude=occ)
+        detection = detect_charuco(rendered.image, spec)
+        solution = estimate_charuco_pose(detection, spec, intrinsics)
+        if solution is None:
+            continue
+        fractions.append(occ * 100)
+        counts.append(detection.count)
+        errors.append(np.linalg.norm(solution.translation - clean.tvec) * 1000)
+    fig, (a, b) = plt.subplots(1, 2, figsize=(11, 4))
+    a.plot(fractions, counts, "o-", color="#4c72b0")
+    a.set_xlabel("board occluded (%)")
+    a.set_ylabel(f"corners detected (of {spec.inner_corners})")
+    a.set_title("ChArUco degrades gracefully")
+    b.plot(fractions, errors, "o-", color="#d1495b")
+    b.set_xlabel("board occluded (%)")
+    b.set_ylabel("translation error (mm)")
+    b.set_title("Pose stays usable while corners remain")
+    fig.tight_layout()
+    fig.savefig(FIGURES / "charuco_occlusion.png", dpi=110)
+    plt.close(fig)
+
+
 def main() -> None:
     FIGURES.mkdir(exist_ok=True)
     calibrator = _build_calibrator()
@@ -216,6 +246,7 @@ def main() -> None:
     _robustness_figure(intrinsics)
     _smoothing_figure()
     _board_occlusion_figure(intrinsics)
+    _charuco_occlusion_figure(intrinsics)
     print(f"\nWrote figures to {FIGURES}")
 
 
