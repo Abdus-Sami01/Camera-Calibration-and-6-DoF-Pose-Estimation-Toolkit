@@ -155,4 +155,5 @@ def _subset_calibrator(calibrator, indices):
     clone._image_size = calibrator._image_size
     clone._image_points = [calibrator._image_points[i] for i in indices]
     clone._sources = [calibrator._sources[i] for i in indices]
+    clone._sharpness = [calibrator._sharpness[i] for i in indices] if calibrator._sharpness else []
     return clone

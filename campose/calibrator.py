@@ -7,9 +7,15 @@ import numpy as np
 
 from .board import CheckerboardSpec, detect_corners
 from .camera_model import CameraIntrinsics, project_points, reprojection_errors, rms
+from .quality import CaptureQualityReport, assess_capture
 from .results import BoardPose, CalibrationResult
 
 _IMAGE_SUFFIXES = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
+
+
+def _sharpness_score(image: np.ndarray) -> float:
+    gray = image if image.ndim == 2 else cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    return float(cv2.Laplacian(gray, cv2.CV_64F).var())
 
 
 class DetectionError(RuntimeError):
@@ -22,6 +28,7 @@ class CameraCalibrator:
         self.refine = refine
         self._image_points: list[np.ndarray] = []
         self._sources: list[str] = []
+        self._sharpness: list[float] = []
         self._image_size: tuple[int, int] | None = None
 
     @property
@@ -35,6 +42,7 @@ class CameraCalibrator:
         self._register_size(detection.image_size, source)
         self._image_points.append(detection.corners)
         self._sources.append(source or f"image_{self.view_count}")
+        self._sharpness.append(_sharpness_score(image))
         return True
 
     def add_image_file(self, path: str | Path) -> bool:
@@ -86,6 +94,9 @@ class CameraCalibrator:
             error = rms(reprojection_errors(observed, projected))
             poses.append(BoardPose(source=source, rvec=rvec.reshape(-1), tvec=tvec.reshape(-1), rms_error=error))
         return poses
+
+    def assess_capture(self, min_images: int = 15) -> CaptureQualityReport:
+        return assess_capture(self._image_points, self._image_size, self.spec, self._sharpness, min_images=min_images)
 
     def flag_outliers(self, result: CalibrationResult, sigma: float = 2.0) -> list[BoardPose]:
         errors = result.per_image_rms

@@ -10,6 +10,7 @@ from .camera_model import (
     rms,
 )
 from .pose_estimator import ObjectPose, PoseEstimator
+from .quality import CaptureQualityReport, QualityFinding, assess_capture
 from .results import BoardPose, CalibrationResult
 from .rotations import (
     geodesic_angle,
@@ -54,5 +55,8 @@ __all__ = [
     "PoseSmoother",
     "SmoothedPose",
     "ConstantVelocityKalman",
+    "assess_capture",
+    "CaptureQualityReport",
+    "QualityFinding",
     "__version__",
 ]
