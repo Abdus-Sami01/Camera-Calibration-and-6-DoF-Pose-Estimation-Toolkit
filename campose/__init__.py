@@ -9,6 +9,13 @@ from .camera_model import (
     reprojection_errors,
     rms,
 )
+from .charuco import (
+    CharucoCalibrator,
+    CharucoSpec,
+    detect_charuco,
+    estimate_charuco_pose,
+    render_charuco,
+)
 from .marker_board import MarkerBoard, grid_board
 from .pose_estimator import BoardPoseResult, ObjectPose, PoseEstimator
 from .quality import CaptureQualityReport, QualityFinding, assess_capture
@@ -49,6 +56,11 @@ __all__ = [
     "BoardPoseResult",
     "MarkerBoard",
     "grid_board",
+    "CharucoSpec",
+    "CharucoCalibrator",
+    "detect_charuco",
+    "estimate_charuco_pose",
+    "render_charuco",
     "solve_pnp",
     "compare_solvers",
     "available_solvers",
