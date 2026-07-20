@@ -116,6 +116,26 @@ Recovered from 22 synthetic images against a known ground truth of
 The per-image chart flags outliers automatically (mean + 2σ); the distortion map
 shows how many pixels the lens model displaces each location.
 
+### Capture-quality assessment
+
+Before calibrating, `CameraCalibrator.assess_capture()` inspects the detected
+corners and warns about the mistakes that quietly ruin a calibration — too few
+images, boards clustered in the centre, no distance variation, all views
+fronto-parallel, soft/blurred frames. The `calibrate` CLI prints it automatically:
+
+```
+Capture quality assessment
+--------------------------
+ok image count     : 21 views (>= 15)
+ok fov coverage    : corners reach 9/9 frame regions
+ok edge coverage   : board reaches all four image edges
+ok distance spread : apparent-size variation 0.37
+ok orientation     : 86% of views are tilted
+ok sharpness       : no obviously blurred views
+
+verdict: capture looks solid
+```
+
 ---
 
 ## Evaluation
@@ -200,6 +220,7 @@ campose/
 ├── pose_estimator.py  # ArUco + planar-target 6-DoF pose
 ├── visualization.py   # 3D poses, distortion maps, error charts, axis overlay
 ├── evaluation.py      # the four experiment runners
+├── quality.py         # pre-calibration capture-quality assessment
 ├── smoothing.py       # constant-velocity Kalman + SLERP pose smoothing
 ├── synthetic.py       # virtual camera with exact ground truth
 ├── live.py            # real-time webcam annotation loop
@@ -220,7 +241,7 @@ campose/
 ## Extensions (natural next steps)
 
 Stereo calibration · ChArUco boards for graceful occlusion handling ·
-multi-marker board pose · automatic capture-quality warnings.
+multi-marker board pose.
 
 ---
 

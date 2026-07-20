@@ -55,7 +55,10 @@ Aim for at least a few images in each of the four image quadrants.
 
 ## Checking your capture instead of guessing
 
-Do not eyeball it — measure it:
+Do not eyeball it — measure it. `CameraCalibrator.assess_capture()` runs the
+checks in the table above automatically and prints a pass/warn verdict per
+category (the `calibrate` CLI shows it before every run), so a weak set is caught
+before it wastes a calibration. Beyond that:
 
 - **Overall RMS** under ~0.5 px is good, under ~1.0 px acceptable. Above 1.0 px,
   recapture before you touch the code.

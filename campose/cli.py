@@ -43,6 +43,9 @@ def _run_calibrate(args) -> int:
     calibrator = CameraCalibrator(spec)
     found = calibrator.add_images(args.images)
     print(f"Detected the board in {found} image(s).")
+    print()
+    print(calibrator.assess_capture().summary())
+    print()
     result = calibrator.calibrate()
     print(result.summary())
     if args.bootstrap:
