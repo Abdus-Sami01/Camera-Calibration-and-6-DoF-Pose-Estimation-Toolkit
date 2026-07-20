@@ -32,6 +32,7 @@ from .rotations import (
 )
 from .smoothing import ConstantVelocityKalman, PoseSmoother, SmoothedPose
 from .solvers import PoseSolution, available_solvers, compare_solvers, solve_pnp
+from .stereo import StereoCalibrationResult, StereoCalibrator, disparity_map, rectify_pair
 
 __version__ = "0.1.0"
 
@@ -61,6 +62,10 @@ __all__ = [
     "detect_charuco",
     "estimate_charuco_pose",
     "render_charuco",
+    "StereoCalibrator",
+    "StereoCalibrationResult",
+    "rectify_pair",
+    "disparity_map",
     "solve_pnp",
     "compare_solvers",
     "available_solvers",
