@@ -38,6 +38,13 @@ class ObjectPose:
         return float(np.linalg.norm(self.translation))
 
 
+@dataclass
+class BoardPoseResult:
+    pose: ObjectPose
+    marker_ids: list[int]
+    marker_count: int
+
+
 def _marker_object_points(marker_size: float) -> np.ndarray:
     half = marker_size / 2.0
     return np.array([
@@ -138,12 +145,30 @@ class PoseEstimator:
             return None
         return self._to_object_pose(solution, observed, None)
 
+    def estimate_board(self, image: np.ndarray, board, min_markers: int = 1, solver: str = "iterative") -> "BoardPoseResult | None":
+        if self._aruco_detector is None:
+            self._ensure_aruco(board.dictionary)
+        corners, ids, _ = self._aruco_detector.detectMarkers(image)
+        if ids is None:
+            return None
+        detected = {int(marker_id): marker_corners.reshape(4, 2) for marker_id, marker_corners in zip(ids.reshape(-1), corners)}
+        object_points, image_points, used = board.correspondences(detected)
+        if len(used) < min_markers:
+            return None
+        solution = solve_pnp(object_points, image_points, self.intrinsics, solver=solver)
+        if not solution.success:
+            return None
+        pose = self._to_object_pose(solution, image_points, None)
+        return BoardPoseResult(pose=pose, marker_ids=used, marker_count=len(used))
+
     def estimate(self, image: np.ndarray, target: str = "aruco", **kwargs):
         if target == "aruco":
             return self.estimate_aruco(image, **kwargs)
         if target == "planar":
             return self.estimate_planar(image, **kwargs)
-        raise ValueError(f"Unknown target {target!r}; use 'aruco' or 'planar'")
+        if target == "board":
+            return self.estimate_board(image, **kwargs)
+        raise ValueError(f"Unknown target {target!r}; use 'aruco', 'planar', or 'board'")
 
     def _to_object_pose(self, solution: PoseSolution, image_points: np.ndarray, identifier: int | None) -> ObjectPose:
         return ObjectPose(

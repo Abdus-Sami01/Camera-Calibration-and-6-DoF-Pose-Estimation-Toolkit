@@ -9,7 +9,8 @@ from .camera_model import (
     reprojection_errors,
     rms,
 )
-from .pose_estimator import ObjectPose, PoseEstimator
+from .marker_board import MarkerBoard, grid_board
+from .pose_estimator import BoardPoseResult, ObjectPose, PoseEstimator
 from .quality import CaptureQualityReport, QualityFinding, assess_capture
 from .results import BoardPose, CalibrationResult
 from .rotations import (
@@ -45,6 +46,9 @@ __all__ = [
     "BoardPose",
     "PoseEstimator",
     "ObjectPose",
+    "BoardPoseResult",
+    "MarkerBoard",
+    "grid_board",
     "solve_pnp",
     "compare_solvers",
     "available_solvers",

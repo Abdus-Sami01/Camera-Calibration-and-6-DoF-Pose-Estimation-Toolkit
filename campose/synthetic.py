@@ -7,7 +7,7 @@ import numpy as np
 
 from .board import CheckerboardSpec
 from .camera_model import CameraIntrinsics, project_points
-from .rotations import rodrigues_to_matrix
+from .rotations import matrix_to_rodrigues, rodrigues_to_matrix
 
 
 @dataclass
@@ -134,3 +134,52 @@ def _pose_from_corners(corners: np.ndarray, intrinsics: CameraIntrinsics, marker
         intrinsics.matrix, intrinsics.distortion, flags=cv2.SOLVEPNP_IPPE_SQUARE,
     )
     return rvec.reshape(-1), tvec.reshape(-1)
+
+
+@dataclass
+class RenderedMarkerBoard:
+    image: np.ndarray
+    rvec: np.ndarray
+    tvec: np.ndarray
+    visible_ids: list[int]
+
+
+def _warp_glyph(glyph_bgr, inner, target, image_size, background):
+    homography, _ = cv2.findHomography(inner, target)
+    warped = cv2.warpPerspective(glyph_bgr, homography, image_size, borderValue=(background, background, background))
+    mask = cv2.warpPerspective(np.ones(glyph_bgr.shape[:2], np.uint8), homography, image_size)
+    return warped, mask.astype(bool)
+
+
+_FACING_ROTATION = rodrigues_to_matrix(np.array([np.pi, 0.0, 0.0]))
+
+
+def render_marker_board(
+    intrinsics: CameraIntrinsics,
+    image_size: tuple[int, int],
+    board,
+    rvec: np.ndarray,
+    tvec: np.ndarray,
+    only_ids: list[int] | None = None,
+    facing: bool = True,
+    background: int = 200,
+    quiet_zone: int = 24,
+) -> RenderedMarkerBoard:
+    rotation = rodrigues_to_matrix(rvec)
+    if facing:
+        rotation = _FACING_ROTATION @ rotation
+    true_rvec = matrix_to_rodrigues(rotation)
+    true_tvec = np.asarray(tvec, dtype=np.float64).reshape(3)
+    aruco_dict = cv2.aruco.getPredefinedDictionary(board.dictionary)
+    scene = np.full((image_size[1], image_size[0], 3), background, dtype=np.uint8)
+    rendered_ids = board.all_ids() if only_ids is None else [i for i in board.all_ids() if i in only_ids]
+    for marker_id in rendered_ids:
+        projected = project_points(board.markers[marker_id], true_rvec, true_tvec, intrinsics).astype(np.float32)
+        glyph = cv2.aruco.generateImageMarker(aruco_dict, marker_id, 240)
+        padded = cv2.copyMakeBorder(glyph, quiet_zone, quiet_zone, quiet_zone, quiet_zone, cv2.BORDER_CONSTANT, value=255)
+        side = padded.shape[0]
+        inner = np.array([[quiet_zone, quiet_zone], [side - quiet_zone, quiet_zone],
+                          [side - quiet_zone, side - quiet_zone], [quiet_zone, side - quiet_zone]], dtype=np.float32)
+        warped, mask = _warp_glyph(cv2.cvtColor(padded, cv2.COLOR_GRAY2BGR), inner, projected, image_size, background)
+        scene[mask] = warped[mask]
+    return RenderedMarkerBoard(image=scene, rvec=true_rvec, tvec=true_tvec, visible_ids=rendered_ids)
